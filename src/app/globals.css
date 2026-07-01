@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #080c14;
+  --color-foreground: #f1f5f9;
+  
+  --color-card: #0f172a;
+  --color-card-border: #1e293b;
+  --color-card-hover: #1e293b;
+  
+  --color-brand-primary: #3b82f6;
+  --color-brand-success: #10b981;
+  --color-brand-danger: #ef4444;
+  --color-brand-warning: #f59e0b;
+  
+  --color-accent-teal: #14b8a6;
+  --color-accent-purple: #8b5cf6;
+  
+  --font-sans: 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+  --background: #080c14;
+  --foreground: #f1f5f9;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel-hover:hover {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(59, 130, 246, 0.2);
+  box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Neon Glow Indicators */
+.glow-success {
+  box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.2);
+}
+
+.glow-danger {
+  box-shadow: 0 0 20px -3px rgba(239, 68, 68, 0.2);
+}
+
+.glow-primary {
+  box-shadow: 0 0 20px -3px rgba(59, 130, 246, 0.2);
+}
+
+/* Custom Webkit Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(8, 12, 20, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(30, 41, 59, 0.8);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+  }
+}
+
+.pulse-glow-dot {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Calendar Days */
+.calendar-day-win {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.calendar-day-loss {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.calendar-day-neutral {
+  background: rgba(30, 41, 59, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+/* Typography styles */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
+  letter-spacing: -0.02em;
+}

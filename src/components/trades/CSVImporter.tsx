@@ -512,8 +512,8 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
                         className="w-full rounded border border-slate-800 bg-[#080c14] px-2 py-1 text-xs text-slate-300 focus:outline-none"
                       >
                         <option value="">-- Ignore --</option>
-                        {csvHeaders.map(header => (
-                          <option key={header} value={header}>{header}</option>
+                        {csvHeaders.filter(h => h.trim() !== '').map((header, hIdx) => (
+                          <option key={`${header}-${hIdx}`} value={header}>{header}</option>
                         ))}
                       </select>
                     </div>

@@ -12,7 +12,9 @@ import {
   Filter,
   RefreshCw,
   Eye,
-  Check
+  Check,
+  Lock,
+  Layers
 } from 'lucide-react';
 import { db } from '../../lib/supabase';
 import { Trade, Journal, Strategy, Profile } from '../../lib/types';
@@ -73,6 +75,20 @@ export default function TradesPage() {
       setTrades(trades.filter(t => t.id !== id));
     } catch (err) {
       alert('Error deleting trade');
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: string | null | undefined) => {
+    if (!batchId) return;
+    if (!confirm('Are you sure you want to delete ALL trades imported in this file batch? This action cannot be undone.')) return;
+    try {
+      setLoading(true);
+      await db.trades.deleteBatch(batchId);
+      setTrades(trades.filter(t => t.batch_id !== batchId));
+    } catch (err) {
+      alert('Error deleting import batch');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -251,13 +267,19 @@ export default function TradesPage() {
                     </td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleEditClick(t)}
-                          className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-blue-400 transition-colors"
-                          title="Edit Trade"
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </button>
+                        {t.source !== 'csv_import' ? (
+                          <button
+                            onClick={() => handleEditClick(t)}
+                            className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-blue-400 transition-colors"
+                            title="Edit Trade"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <span className="p-1 text-slate-700 cursor-not-allowed" title="Imported trades cannot be edited">
+                            <Lock className="h-3.5 w-3.5" />
+                          </span>
+                        )}
                         <button
                           onClick={() => handleDeleteTrade(t.id)}
                           className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-rose-450 transition-colors"
@@ -265,6 +287,15 @@ export default function TradesPage() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
+                        {t.batch_id && (
+                          <button
+                            onClick={() => handleDeleteBatch(t.batch_id)}
+                            className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-orange-400 transition-colors"
+                            title="Delete entire import batch"
+                          >
+                            <Layers className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

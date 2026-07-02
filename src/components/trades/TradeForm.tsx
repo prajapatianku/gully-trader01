@@ -175,6 +175,8 @@ export default function TradeForm({
     const payload = {
       user_id: userId,
       journal_id: journalId,
+      source: tradeToEdit ? tradeToEdit.source : 'manual',
+      batch_id: tradeToEdit ? tradeToEdit.batch_id : null,
       trade_date: tradeDate,
       exchange,
       segment,

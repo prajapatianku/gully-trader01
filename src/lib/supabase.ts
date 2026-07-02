@@ -310,7 +310,12 @@ export const db = {
 
       // Automatically calculate P&L and Charges
       const calculated = calculateTradePnLAndCharges(tradeDetails);
-      const fullTradePayload = { ...tradeDetails, ...calculated };
+      const fullTradePayload = { 
+        ...tradeDetails, 
+        ...calculated,
+        source: trade.source || 'manual',
+        batch_id: trade.batch_id || null
+      };
 
       // Real Supabase insert
       const { data, error } = await supabase!
@@ -347,6 +352,9 @@ export const db = {
         .single();
 
       if (getErr || !existing) throw new Error("Could not find trade to update");
+      if (existing.source === 'csv_import') {
+        throw new Error("Imported trades cannot be modified.");
+      }
 
       const merged = { ...existing, ...tradeUpdates };
       const calculated = calculateTradePnLAndCharges(merged);
@@ -383,6 +391,17 @@ export const db = {
         .from('trades')
         .delete()
         .eq('id', id);
+      if (error) throw error;
+    },
+
+    deleteBatch: async (batchId: string): Promise<void> => {
+      if (!isSupabaseConfigured) {
+        return mockDb.mockTrades.deleteBatch(batchId);
+      }
+      const { error } = await supabase!
+        .from('trades')
+        .delete()
+        .eq('batch_id', batchId);
       if (error) throw error;
     },
 

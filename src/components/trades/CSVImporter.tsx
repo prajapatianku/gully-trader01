@@ -334,6 +334,7 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
     }
 
     const targetId = targetJournalId || journals.filter(j => !j.deleted_at)[0]?.id;
+    const batchId = 'batch-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
 
     // Group executions by Symbol and match them into completed closed trades
     const symbolGroups: { [symbol: string]: any[] } = {};
@@ -465,6 +466,8 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
         tradesToProcess.push({
           user_id: userId,
           journal_id: targetId,
+          source: 'csv_import',
+          batch_id: batchId,
           trade_date: dateVal,
           exchange: executions[0].exchange,
           segment: executions[0].segment,
@@ -511,6 +514,8 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
         tradesToProcess.push({
           user_id: userId,
           journal_id: targetId,
+          source: 'csv_import',
+          batch_id: batchId,
           trade_date: dateVal,
           exchange: executions[0].exchange,
           segment: executions[0].segment,

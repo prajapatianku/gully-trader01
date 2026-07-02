@@ -603,6 +603,8 @@ export const mockTrades = {
     const newT: Trade = {
       ...trade,
       id: `trade-${Math.random().toString(36).substr(2, 9)}`,
+      source: (trade as any).source || 'manual',
+      batch_id: (trade as any).batch_id || null,
       gross_pnl: Number(gross_pnl.toFixed(2)),
       brokerage,
       stt,
@@ -624,6 +626,9 @@ export const mockTrades = {
     const list = getStore<Trade>('trades');
     const index = list.findIndex(t => t.id === id);
     if (index === -1) throw new Error('Trade not found');
+    if (list[index].source === 'csv_import') {
+      throw new Error('Imported trades cannot be modified.');
+    }
 
     const merged = { ...list[index], ...updates };
     
@@ -661,6 +666,12 @@ export const mockTrades = {
     // Clean up associated rule violations
     const violations = getStore<RuleViolation>('rule_violations').filter(rv => rv.trade_id !== id);
     saveStore('rule_violations', violations);
+  },
+
+  deleteBatch: (batchId: string) => {
+    const list = getStore<Trade>('trades');
+    const filtered = list.filter(t => t.batch_id !== batchId);
+    saveStore('trades', filtered);
   },
 
   checkDuplicate: (trade: { journal_id: string; trade_date: string; symbol: string; entry_price: number; quantity: number; direction: 'LONG' | 'SHORT' }): boolean => {

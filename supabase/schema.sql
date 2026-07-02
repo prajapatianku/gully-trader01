@@ -92,6 +92,9 @@ CREATE TABLE IF NOT EXISTS public.trades (
     screenshot_url TEXT,
     tv_link TEXT, -- TradingView link
     
+    source TEXT DEFAULT 'manual' NOT NULL CHECK (source IN ('manual', 'csv_import')),
+    batch_id TEXT,
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

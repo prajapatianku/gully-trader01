@@ -17,6 +17,7 @@ import Navbar from '../../components/layout/Navbar';
 import Overview from '../../components/dashboard/Overview';
 import AnalyticsCharts from '../../components/dashboard/AnalyticsCharts';
 import CalendarView from '../../components/dashboard/CalendarView';
+import OpenPositionsDesk from '../../components/dashboard/OpenPositionsDesk';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -219,6 +220,19 @@ export default function DashboardPage() {
           <>
             {/* 1. Overview metrics grid */}
             <Overview trades={filteredTrades} currency={activeCurrency} />
+
+            {/* 1.5 Live Open Positions & Exposure Desk */}
+            <div className="border-t border-slate-800/80 pt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Live Open Positions & Exposure Desk</h2>
+              </div>
+              <OpenPositionsDesk 
+                trades={trades.filter(t => selectedJournalId === 'global' || t.journal_id === selectedJournalId)} 
+                currency={activeCurrency} 
+                onRefresh={handleRefresh} 
+              />
+            </div>
 
             {/* 2. Analytics charts and Calendar row */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

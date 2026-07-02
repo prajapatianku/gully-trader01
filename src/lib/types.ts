@@ -82,6 +82,8 @@ export interface Trade {
   tv_link: string | null;
   
   tags?: string[]; // Hydrated tags
+  source?: 'manual' | 'csv_import';
+  batch_id?: string | null;
   created_at: string;
   updated_at: string;
 }

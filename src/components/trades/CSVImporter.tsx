@@ -69,7 +69,7 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
   const [importedCount, setImportedCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
 
-  // Simple CSV Parser that handles commas, quotes, and newlines
+  // Simple CSV Parser that handles commas, quotes, and searches for the actual header row
   const parseCSV = (text: string): { headers: string[]; rows: ParsedRow[] } => {
     const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
     if (lines.length === 0) return { headers: [], rows: [] };
@@ -94,16 +94,41 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
       return result;
     };
 
-    const headers = splitCSVLine(lines[0]).map(h => h.replace(/^["']|["']$/g, ''));
+    const allLinesParsed = lines.map(line => splitCSVLine(line).map(c => c.replace(/^["']|["']$/g, '')));
+
+    // Find the header row index (row that contains trading terms)
+    let headerRowIndex = 0;
+    const headerKeywords = ['date', 'symbol', 'scrip', 'qty', 'quantity', 'price', 'direction', 'buy', 'sell', 'trade'];
+    for (let i = 0; i < Math.min(25, allLinesParsed.length); i++) {
+      const row = allLinesParsed[i];
+      let matchCount = 0;
+      row.forEach(cell => {
+        const cellStr = cell.toLowerCase();
+        if (headerKeywords.some(kw => cellStr.includes(kw))) {
+          matchCount++;
+        }
+      });
+      if (matchCount >= 3) {
+        headerRowIndex = i;
+        break;
+      }
+    }
+
+    const headers = allLinesParsed[headerRowIndex].map(h => h.trim());
     const rows: ParsedRow[] = [];
 
-    for (let i = 1; i < lines.length; i++) {
-      const cells = splitCSVLine(lines[i]).map(c => c.replace(/^["']|["']$/g, ''));
-      if (cells.length === headers.length) {
-        const row: ParsedRow = {};
-        headers.forEach((header, idx) => {
-          row[header] = cells[idx];
-        });
+    for (let i = headerRowIndex + 1; i < allLinesParsed.length; i++) {
+      const cells = allLinesParsed[i];
+      const row: ParsedRow = {};
+      let hasData = false;
+      headers.forEach((header, idx) => {
+        if (header) {
+          const val = cells[idx] !== undefined ? cells[idx] : '';
+          row[header] = val;
+          if (val !== '') hasData = true;
+        }
+      });
+      if (hasData) {
         rows.push(row);
       }
     }
@@ -129,22 +154,45 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
-          const sheetJson = XLSX.utils.sheet_to_json<any>(worksheet, { defval: "" });
+          
+          // Parse sheet as 2D array of rows
+          const rangeJson = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: "" });
 
-          if (sheetJson.length > 0) {
-            // Harvest headers from keys of all items
-            const allHeaders = new Set<string>();
-            sheetJson.forEach(row => {
-              Object.keys(row).forEach(key => allHeaders.add(key));
-            });
-            headers = Array.from(allHeaders);
+          if (rangeJson.length > 0) {
+            // Find the header row index (row that contains trading terms)
+            let headerRowIndex = 0;
+            const headerKeywords = ['date', 'symbol', 'scrip', 'qty', 'quantity', 'price', 'direction', 'buy', 'sell', 'trade'];
+            for (let i = 0; i < Math.min(25, rangeJson.length); i++) {
+              const row = rangeJson[i];
+              let matchCount = 0;
+              if (Array.isArray(row)) {
+                row.forEach(cell => {
+                  const cellStr = String(cell || '').toLowerCase();
+                  if (headerKeywords.some(kw => cellStr.includes(kw))) {
+                    matchCount++;
+                  }
+                });
+              }
+              if (matchCount >= 3) {
+                headerRowIndex = i;
+                break;
+              }
+            }
 
-            rows = sheetJson.map(row => {
+            headers = (rangeJson[headerRowIndex] || []).map((h: any) => String(h || '').trim());
+            const dataRows = rangeJson.slice(headerRowIndex + 1);
+
+            rows = dataRows.map(dataRow => {
               const parsedRow: ParsedRow = {};
-              headers.forEach(header => {
-                parsedRow[header] = row[header] !== undefined && row[header] !== null ? String(row[header]) : '';
+              headers.forEach((header, colIdx) => {
+                if (header) {
+                  parsedRow[header] = dataRow[colIdx] !== undefined && dataRow[colIdx] !== null ? String(dataRow[colIdx]) : '';
+                }
               });
               return parsedRow;
+            }).filter(row => {
+              // Exclude empty rows
+              return Object.values(row).some(val => val !== '');
             });
           }
         } else {

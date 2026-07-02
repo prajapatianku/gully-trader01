@@ -335,68 +335,211 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
 
     const targetId = targetJournalId || journals.filter(j => !j.deleted_at)[0]?.id;
 
-    // Build array of parsed trade payloads
-    const tradesToProcess = csvRows.map((row, idx) => {
-      // Find a backup date if mappings.date is empty
-      let dateVal = row[mappings.date];
-      if (!dateVal) {
-        const dateKey = Object.keys(row).find(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('day') || k.toLowerCase().includes('time') || k.toLowerCase().includes('download'));
-        if (dateKey) dateVal = row[dateKey];
+    // Group executions by Symbol and match them into completed closed trades
+    const symbolGroups: { [symbol: string]: any[] } = {};
+    
+    csvRows.forEach((row, idx) => {
+      let symbolVal = row[mappings.symbol];
+      if (!symbolVal) {
+        const symbolKey = Object.keys(row).find(k => k.toLowerCase().includes('symbol') || k.toLowerCase().includes('scrip') || k.toLowerCase().includes('contract') || k.toLowerCase().includes('company'));
+        if (symbolKey) symbolVal = row[symbolKey];
       }
       
-      const formattedDate = formatParsedDate(dateVal);
-      const finalDate = formattedDate || new Date().toISOString().split('T')[0];
-
-      const symbolVal = row[mappings.symbol] || 'UNKNOWN';
-      const directionVal = (row[mappings.direction] || 'BUY').toUpperCase().includes('SELL') || (row[mappings.direction] || '').toUpperCase().includes('SHORT') ? 'SHORT' : 'LONG';
+      const symbolClean = (symbolVal || 'UNKNOWN').toUpperCase().trim();
+      if (!symbolClean || symbolClean === 'UNKNOWN') return;
       
-      let priceVal = Number(row[mappings.price] || 0);
-      // Smart separate Buy/Sell price columns fallback (especially for Angel One order books)
-      if (priceVal === 0) {
-        if (directionVal === 'LONG') {
-          const buyPriceKey = Object.keys(row).find(k => k.toLowerCase().includes('buy') && (k.toLowerCase().includes('price') || k.toLowerCase().includes('average') || k.toLowerCase().includes('rate') || k.toLowerCase().includes('cost')));
-          if (buyPriceKey) priceVal = Number(row[buyPriceKey] || 0);
-        } else {
-          const sellPriceKey = Object.keys(row).find(k => k.toLowerCase().includes('sell') && (k.toLowerCase().includes('price') || k.toLowerCase().includes('average') || k.toLowerCase().includes('rate') || k.toLowerCase().includes('cost')));
-          if (sellPriceKey) priceVal = Number(row[sellPriceKey] || 0);
+      if (!symbolGroups[symbolClean]) {
+        symbolGroups[symbolClean] = [];
+      }
+      symbolGroups[symbolClean].push({ row, originalIndex: idx });
+    });
+
+    const tradesToProcess: any[] = [];
+
+    // Helper to find specific charge columns dynamically in the Excel row
+    const findChargeValue = (row: any, keys: string[]) => {
+      const key = Object.keys(row).find(k => keys.some(kw => k.toLowerCase().includes(kw)));
+      return key ? Number(row[key] || 0) : 0;
+    };
+
+    Object.keys(symbolGroups).forEach(symbol => {
+      const group = symbolGroups[symbol];
+      
+      const executions = group.map(item => {
+        const row = item.row;
+        let dateVal = row[mappings.date];
+        if (!dateVal) {
+          const dateKey = Object.keys(row).find(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('day') || k.toLowerCase().includes('time'));
+          if (dateKey) dateVal = row[dateKey];
         }
-      }
-      const qtyVal = Number(row[mappings.quantity] || 0);
-      const brokerageVal = Number(row[mappings.brokerage] || 0);
-      const exchangeVal = row[mappings.exchange] || 'NSE';
-      const segmentVal = row[mappings.segment] || 'Options';
+        
+        const formattedDate = formatParsedDate(dateVal);
+        const finalDate = formattedDate || new Date().toISOString().split('T')[0];
+        
+        const directionRaw = (row[mappings.direction] || 'BUY').toUpperCase();
+        const isSell = directionRaw.includes('SELL') || directionRaw.includes('SHORT') || directionRaw === 'S';
+        const direction = isSell ? 'SELL' : 'BUY';
+        
+        let price = Number(row[mappings.price] || 0);
+        if (price === 0) {
+          if (direction === 'BUY') {
+            const buyPriceKey = Object.keys(row).find(k => k.toLowerCase().includes('buy') && (k.toLowerCase().includes('price') || k.toLowerCase().includes('average') || k.toLowerCase().includes('rate') || k.toLowerCase().includes('cost')));
+            if (buyPriceKey) price = Number(row[buyPriceKey] || 0);
+          } else {
+            const sellPriceKey = Object.keys(row).find(k => k.toLowerCase().includes('sell') && (k.toLowerCase().includes('price') || k.toLowerCase().includes('average') || k.toLowerCase().includes('rate') || k.toLowerCase().includes('cost')));
+            if (sellPriceKey) price = Number(row[sellPriceKey] || 0);
+          }
+        }
 
-      return {
-        user_id: userId,
-        journal_id: targetId,
-        trade_date: finalDate,
-        exchange: exchangeVal,
-        segment: segmentVal,
-        symbol: symbolVal.toUpperCase(),
-        direction: directionVal as 'LONG' | 'SHORT',
-        entry_price: priceVal,
-        exit_price: priceVal * 1.02, // dummy closed trade simulation for simplicity or import open
-        quantity: qtyVal,
-        entry_time: new Date(finalDate).toISOString(),
-        exit_time: new Date(finalDate).toISOString(),
-        status: 'CLOSED' as const,
-        brokerage: brokerageVal,
-        stt: 0,
-        gst: 0,
-        exchange_charges: 0,
-        stamp_duty: 0,
-        sebi_charges: 0,
-        stop_loss: null,
-        target: null,
-        risk_amount: null,
-        strategy_id: null,
-        notes: `Imported via CSV (${fileName})`,
-        exit_reason: 'CSV Import',
-        lessons_learned: null,
-        screenshot_url: null,
-        tv_link: null
-      };
-    }).filter(t => t.entry_price > 0 && t.quantity > 0);
+        const quantity = Number(row[mappings.quantity] || 0);
+        const brokerage = Number(row[mappings.brokerage] || 0) || findChargeValue(row, ['brokerage']);
+        const gst = findChargeValue(row, ['gst']);
+        const stt = findChargeValue(row, ['stt', 'security transaction']);
+        const exchange_charges = findChargeValue(row, ['exchange turnover', 'exchange charge', 'turnover charge']);
+        const stamp_duty = findChargeValue(row, ['stamp duty', 'stamp charge']);
+        const sebi_charges = findChargeValue(row, ['sebi tax', 'sebi charge']);
+        
+        const exchange = row[mappings.exchange] || 'NSE';
+        const segment = row[mappings.segment] || 'Options';
+
+        return {
+          date: finalDate,
+          direction,
+          price,
+          quantity,
+          brokerage,
+          gst,
+          stt,
+          exchange_charges,
+          stamp_duty,
+          sebi_charges,
+          exchange,
+          segment,
+          originalIndex: item.originalIndex
+        };
+      }).filter(e => e.quantity > 0 && e.price > 0);
+
+      if (executions.length === 0) return;
+
+      executions.sort((a, b) => a.originalIndex - b.originalIndex);
+
+      const buys = executions.filter(e => e.direction === 'BUY');
+      const sells = executions.filter(e => e.direction === 'SELL');
+
+      if (buys.length > 0 && sells.length > 0) {
+        // Aggregate buy executions
+        const totalBuyQty = buys.reduce((sum, e) => sum + e.quantity, 0);
+        const totalBuyVolume = buys.reduce((sum, e) => sum + (e.quantity * e.price), 0);
+        const avgBuyPrice = totalBuyVolume / totalBuyQty;
+        
+        // Sum individual charge columns
+        const totalBuyBrokerage = buys.reduce((sum, e) => sum + e.brokerage, 0);
+        const totalBuyGst = buys.reduce((sum, e) => sum + e.gst, 0);
+        const totalBuyStt = buys.reduce((sum, e) => sum + e.stt, 0);
+        const totalBuyEx = buys.reduce((sum, e) => sum + e.exchange_charges, 0);
+        const totalBuyStamp = buys.reduce((sum, e) => sum + e.stamp_duty, 0);
+        const totalBuySebi = buys.reduce((sum, e) => sum + e.sebi_charges, 0);
+
+        // Aggregate sell executions
+        const totalSellQty = sells.reduce((sum, e) => sum + e.quantity, 0);
+        const totalSellVolume = sells.reduce((sum, e) => sum + (e.quantity * e.price), 0);
+        const avgSellPrice = totalSellVolume / totalSellQty;
+        
+        // Sum individual charge columns
+        const totalSellBrokerage = sells.reduce((sum, e) => sum + e.brokerage, 0);
+        const totalSellGst = sells.reduce((sum, e) => sum + e.gst, 0);
+        const totalSellStt = sells.reduce((sum, e) => sum + e.stt, 0);
+        const totalSellEx = sells.reduce((sum, e) => sum + e.exchange_charges, 0);
+        const totalSellStamp = sells.reduce((sum, e) => sum + e.stamp_duty, 0);
+        const totalSellSebi = sells.reduce((sum, e) => sum + e.sebi_charges, 0);
+
+        const firstExecDirection = executions[0].direction;
+        const directionVal = firstExecDirection === 'BUY' ? 'LONG' : 'SHORT';
+
+        const tradeQty = Math.min(totalBuyQty, totalSellQty);
+        const entryPrice = directionVal === 'LONG' ? avgBuyPrice : avgSellPrice;
+        const exitPrice = directionVal === 'LONG' ? avgSellPrice : avgBuyPrice;
+        
+        const dateVal = executions[0].date;
+
+        tradesToProcess.push({
+          user_id: userId,
+          journal_id: targetId,
+          trade_date: dateVal,
+          exchange: executions[0].exchange,
+          segment: executions[0].segment,
+          symbol: symbol,
+          direction: directionVal,
+          entry_price: Number(entryPrice.toFixed(2)),
+          exit_price: Number(exitPrice.toFixed(2)),
+          quantity: tradeQty,
+          entry_time: new Date(dateVal).toISOString(),
+          exit_time: new Date(dateVal).toISOString(),
+          status: 'CLOSED' as const,
+          brokerage: Number((totalBuyBrokerage + totalSellBrokerage).toFixed(2)),
+          stt: Number((totalBuyStt + totalSellStt).toFixed(2)),
+          gst: Number((totalBuyGst + totalSellGst).toFixed(2)),
+          exchange_charges: Number((totalBuyEx + totalSellEx).toFixed(2)),
+          stamp_duty: Number((totalBuyStamp + totalSellStamp).toFixed(2)),
+          sebi_charges: Number((totalBuySebi + totalSellSebi).toFixed(2)),
+          stop_loss: null,
+          target: null,
+          risk_amount: null,
+          strategy_id: null,
+          notes: `Imported & Matched via spreadsheet (${fileName})`,
+          exit_reason: 'Matched Executions',
+          lessons_learned: null,
+          screenshot_url: null,
+          tv_link: null
+        });
+      } else {
+        // Unmatched executions (all buy or all sell)
+        const totalQty = executions.reduce((sum, e) => sum + e.quantity, 0);
+        const totalVolume = executions.reduce((sum, e) => sum + (e.quantity * e.price), 0);
+        const avgPrice = totalVolume / totalQty;
+        
+        const totalBrokerage = executions.reduce((sum, e) => sum + e.brokerage, 0);
+        const totalGst = executions.reduce((sum, e) => sum + e.gst, 0);
+        const totalStt = executions.reduce((sum, e) => sum + e.stt, 0);
+        const totalEx = executions.reduce((sum, e) => sum + e.exchange_charges, 0);
+        const totalStamp = executions.reduce((sum, e) => sum + e.stamp_duty, 0);
+        const totalSebi = executions.reduce((sum, e) => sum + e.sebi_charges, 0);
+
+        const directionVal = executions[0].direction === 'BUY' ? 'LONG' : 'SHORT';
+        const dateVal = executions[0].date;
+
+        tradesToProcess.push({
+          user_id: userId,
+          journal_id: targetId,
+          trade_date: dateVal,
+          exchange: executions[0].exchange,
+          segment: executions[0].segment,
+          symbol: symbol,
+          direction: directionVal,
+          entry_price: Number(avgPrice.toFixed(2)),
+          exit_price: directionVal === 'LONG' ? Number((avgPrice * 1.02).toFixed(2)) : Number((avgPrice * 0.98).toFixed(2)),
+          quantity: totalQty,
+          entry_time: new Date(dateVal).toISOString(),
+          exit_time: new Date(dateVal).toISOString(),
+          status: 'CLOSED' as const,
+          brokerage: Number(totalBrokerage.toFixed(2)),
+          stt: Number(totalStt.toFixed(2)),
+          gst: Number(totalGst.toFixed(2)),
+          exchange_charges: Number(totalEx.toFixed(2)),
+          stamp_duty: Number(totalStamp.toFixed(2)),
+          sebi_charges: Number(totalSebi.toFixed(2)),
+          stop_loss: null,
+          target: null,
+          risk_amount: null,
+          strategy_id: null,
+          notes: `Imported via spreadsheet (${fileName})`,
+          exit_reason: 'Spreadsheet Ingest',
+          lessons_learned: null,
+          screenshot_url: null,
+          tv_link: null
+        });
+      }
+    });
 
     if (tradesToProcess.length === 0) {
       alert('No valid trades parsed. Check your field mappings.');

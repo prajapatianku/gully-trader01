@@ -565,27 +565,27 @@ export const mockTrades = {
     // Auto calculate Indian stock taxes if empty & broker selected
     let { brokerage, stt, gst, exchange_charges, stamp_duty, sebi_charges } = trade;
     
-    const isZeroCharges = (brokerage + stt + gst + exchange_charges + stamp_duty + sebi_charges) === 0;
+    const isZeroTaxes = (stt + gst + exchange_charges + stamp_duty + sebi_charges) === 0;
     
-    if (isZeroCharges && trade.exit_price) {
+    if (isZeroTaxes && trade.exit_price) {
       const volume = (trade.entry_price + trade.exit_price) * trade.quantity;
       if (trade.exchange === 'NSE' || trade.exchange === 'BSE') {
         if (trade.segment === 'Options') {
-          brokerage = 40.00;
+          if (brokerage === 0) brokerage = 40.00;
           stt = Number((trade.exit_price * trade.quantity * 0.00125).toFixed(2));
           exchange_charges = Number((volume * 0.0005).toFixed(2));
           gst = Number(((brokerage + exchange_charges) * 0.18).toFixed(2));
           stamp_duty = trade.direction === 'LONG' ? Number((trade.entry_price * trade.quantity * 0.00003).toFixed(2)) : 0;
           sebi_charges = Number((volume * 0.000001).toFixed(2));
         } else if (trade.segment === 'Equity') {
-          brokerage = 0.00; // standard broker free equity
+          if (brokerage === 0) brokerage = 0.00;
           stt = Number((volume * 0.001).toFixed(2));
           exchange_charges = Number((volume * 0.0000345).toFixed(2));
           gst = Number(((brokerage + exchange_charges) * 0.18).toFixed(2));
           stamp_duty = trade.direction === 'LONG' ? Number((trade.entry_price * trade.quantity * 0.00015).toFixed(2)) : 0;
           sebi_charges = Number((volume * 0.000001).toFixed(2));
         } else { // Futures
-          brokerage = 40.00;
+          if (brokerage === 0) brokerage = 40.00;
           stt = Number((trade.exit_price * trade.quantity * 0.000125).toFixed(2));
           exchange_charges = Number((volume * 0.0002).toFixed(2));
           gst = Number(((brokerage + exchange_charges) * 0.18).toFixed(2));
@@ -593,7 +593,7 @@ export const mockTrades = {
           sebi_charges = Number((volume * 0.000001).toFixed(2));
         }
       } else { // Global Forex/Crypto
-        brokerage = Number((volume * 0.0004).toFixed(2)); // flat taker fee
+        if (brokerage === 0) brokerage = Number((volume * 0.0004).toFixed(2));
       }
     }
 

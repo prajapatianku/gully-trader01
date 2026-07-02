@@ -532,16 +532,16 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
                   <table className="w-full text-left text-xs text-slate-400">
                     <thead className="sticky top-0 bg-slate-900 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-800">
                       <tr>
-                        {csvHeaders.slice(0, 6).map(h => (
-                          <th key={h} className="px-4 py-2">{h}</th>
+                        {csvHeaders.slice(0, 6).map((h, idx) => (
+                          <th key={`${h}-${idx}`} className="px-4 py-2">{h || `Column ${idx + 1}`}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-850">
                       {csvRows.slice(0, 5).map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-900/20">
-                          {csvHeaders.slice(0, 6).map(h => (
-                            <td key={h} className="px-4 py-2 truncate max-w-[120px]">{row[h]}</td>
+                          {csvHeaders.slice(0, 6).map((h, colIdx) => (
+                            <td key={`${h}-${colIdx}`} className="px-4 py-2 truncate max-w-[120px]">{row[h]}</td>
                           ))}
                         </tr>
                       ))}

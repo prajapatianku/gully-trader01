@@ -29,6 +29,39 @@ interface ParsedRow {
   [key: string]: string;
 }
 
+// Convert Excel dates (serial numbers) or standard formats into ISO dates
+function formatParsedDate(val: any): string {
+  if (!val) return '';
+  const valStr = String(val).trim();
+
+  if (val instanceof Date) {
+    return val.toISOString().split('T')[0];
+  }
+
+  if (valStr.includes('T') && !isNaN(Date.parse(valStr))) {
+    return valStr.split('T')[0];
+  }
+
+  // Handle Excel date serials (e.g. 46204 -> 2026-07-02)
+  if (/^\d{5}(\.\d+)?$/.test(valStr)) {
+    const serial = parseFloat(valStr);
+    const date_info = new Date((serial - 25569) * 86400 * 1000);
+    const yyyy = date_info.getUTCFullYear();
+    const mm = String(date_info.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(date_info.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Handle DD/MM/YYYY or DD-MM-YYYY -> YYYY-MM-DD
+  const match = valStr.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$/);
+  if (match) {
+    const [_, d, m, y] = match;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  return valStr;
+}
+
 export default function CSVImporter({ userId, journals, onImportComplete, onClose }: CSVImporterProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1); // 1: Upload, 2: Map & Preview, 3: Import / Summary
   const [broker, setBroker] = useState<'zerodha' | 'groww' | 'fyers' | 'angelone' | 'generic'>('generic');
@@ -310,7 +343,9 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
         const dateKey = Object.keys(row).find(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('day') || k.toLowerCase().includes('time') || k.toLowerCase().includes('download'));
         if (dateKey) dateVal = row[dateKey];
       }
-      dateVal = dateVal || new Date().toISOString().split('T')[0];
+      
+      const formattedDate = formatParsedDate(dateVal);
+      const finalDate = formattedDate || new Date().toISOString().split('T')[0];
 
       const symbolVal = row[mappings.symbol] || 'UNKNOWN';
       const directionVal = (row[mappings.direction] || 'BUY').toUpperCase().includes('SELL') || (row[mappings.direction] || '').toUpperCase().includes('SHORT') ? 'SHORT' : 'LONG';
@@ -334,7 +369,7 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
       return {
         user_id: userId,
         journal_id: targetId,
-        trade_date: dateVal,
+        trade_date: finalDate,
         exchange: exchangeVal,
         segment: segmentVal,
         symbol: symbolVal.toUpperCase(),
@@ -342,8 +377,8 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
         entry_price: priceVal,
         exit_price: priceVal * 1.02, // dummy closed trade simulation for simplicity or import open
         quantity: qtyVal,
-        entry_time: new Date(dateVal).toISOString(),
-        exit_time: new Date(dateVal).toISOString(),
+        entry_time: new Date(finalDate).toISOString(),
+        exit_time: new Date(finalDate).toISOString(),
         status: 'CLOSED' as const,
         brokerage: brokerageVal,
         stt: 0,

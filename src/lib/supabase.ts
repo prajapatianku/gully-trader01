@@ -279,7 +279,8 @@ export const db = {
         .from('trades')
         .select(`
           *,
-          strategies(name)
+          strategies(name),
+          trade_tags(tag)
         `)
         .eq('user_id', userId);
 
@@ -294,17 +295,8 @@ export const db = {
       const listData = (data || []).map((t: any) => ({
         ...t,
         strategy_name: t.strategies?.name || undefined,
-        tags: [] // In real Supabase, would query trade_tags junction
+        tags: t.trade_tags?.map((tt: any) => tt.tag) || []
       }));
-
-      // Fetch tags for each trade (simplified)
-      for (const t of listData) {
-        const { data: tagData } = await supabase!
-          .from('trade_tags')
-          .select('tag')
-          .eq('trade_id', t.id);
-        t.tags = tagData?.map(td => td.tag) || [];
-      }
 
       return listData as Trade[];
     },

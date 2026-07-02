@@ -41,8 +41,65 @@ export const db = {
       if (!isSupabaseConfigured) {
         return mockDb.mockAuth.login(email, adminMode);
       }
-      // Simple OTP or passwordless sign-in trigger
-      throw new Error("Supabase auth login must be handled via Supabase Auth UI or Client methods.");
+      throw new Error("Supabase auth login must be handled via db.auth.signIn or db.auth.signUp when connected.");
+    },
+
+    signUp: async (email: string, password: string): Promise<Profile> => {
+      if (!isSupabaseConfigured) {
+        return mockDb.mockAuth.login(email, false);
+      }
+      const { data, error } = await supabase!.auth.signUp({ email, password });
+      if (error) throw error;
+      if (!data.user) throw new Error("Sign up returned no user data");
+
+      // Wait a moment for trigger profile hydration
+      let profile: Profile | null = null;
+      for (let i = 0; i < 6; i++) {
+        const { data: p } = await supabase!
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+        if (p) {
+          profile = p as Profile;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 400));
+      }
+      if (!profile) throw new Error("Verification profile not ready. Please reload page.");
+      return profile;
+    },
+
+    signIn: async (email: string, password: string): Promise<Profile> => {
+      if (!isSupabaseConfigured) {
+        return mockDb.mockAuth.login(email, false);
+      }
+      const { data, error } = await supabase!.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (!data.user) throw new Error("Invalid sign in session");
+
+      const { data: profile, error: pError } = await supabase!
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      if (pError || !profile) throw new Error("Hydration failed. Check schema.sql triggers.");
+      return profile as Profile;
+    },
+
+    signInWithGoogle: async (): Promise<void> => {
+      if (!isSupabaseConfigured) {
+        mockDb.mockAuth.login('google-trader@gullytrader.in', false);
+        return;
+      }
+      const { error } = await supabase!.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined
+        }
+      });
+      if (error) throw error;
     },
 
     logout: async (): Promise<void> => {

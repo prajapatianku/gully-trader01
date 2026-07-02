@@ -9,24 +9,40 @@ export default function AuthPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleMockLogin = async (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
+    const targetEmail = email.trim();
+    if (!targetEmail || !password) {
+      setError('Please enter both email and password.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Simulate network request
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const targetEmail = email.trim() || 'trader@gullytrader.in';
-      const isAdmin = targetEmail === 'admin@gullytrader.in';
+      // Check if Env variables exist for live connection
+      const isLive = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
       
-      await db.auth.login(targetEmail, isAdmin);
+      if (isLive) {
+        if (isSignUp) {
+          await db.auth.signUp(targetEmail, password);
+        } else {
+          await db.auth.signIn(targetEmail, password);
+        }
+      } else {
+        // Fallback to local storage mock profile
+        const isAdmin = targetEmail === 'admin@gullytrader.in';
+        await db.auth.login(targetEmail, isAdmin);
+      }
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
       setLoading(false);
     }
@@ -36,11 +52,14 @@ export default function AuthPage() {
     setLoading(true);
     setError('');
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      await db.auth.login('google-trader@gullytrader.in', false);
-      router.push('/dashboard');
-    } catch (err) {
-      setError('Google Sign-in failed');
+      await db.auth.signInWithGoogle();
+      const isLive = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      if (!isLive) {
+        // Direct local storage bypass redirect
+        router.push('/dashboard');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Google Sign-in failed.');
     } finally {
       setLoading(false);
     }
@@ -59,7 +78,7 @@ export default function AuthPage() {
           Welcome to Gully Trader
         </h2>
         <p className="mt-2 text-center text-xs text-slate-500">
-          Enter credentials or connect using Google to log your trades
+          {isSignUp ? 'Create your trading profile' : 'Enter credentials or connect using Google to log your trades'}
         </p>
       </div>
 
@@ -67,14 +86,14 @@ export default function AuthPage() {
         <div className="rounded-xl border border-slate-800 bg-[#0f172a]/80 p-8 shadow-2xl backdrop-blur-md glow-primary space-y-6">
           
           {error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-600/10 p-3.5 text-xs text-red-400 flex items-center gap-2">
+            <div className="rounded-lg border border-red-500/20 bg-red-650/10 p-3.5 text-xs text-red-400 flex items-center gap-2">
               <AlertCircle className="h-4.5 w-4.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleMockLogin} className="space-y-4">
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1">Email Address</label>
               <div className="relative">
@@ -110,8 +129,18 @@ export default function AuthPage() {
               disabled={loading}
               className="w-full rounded-lg bg-blue-600 py-3 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/15"
             >
-              {loading ? 'Authenticating...' : 'Sign In'}
+              {loading ? 'Authenticating...' : isSignUp ? 'Sign Up' : 'Sign In'}
             </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
+              >
+                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account yet? Create one here"}
+              </button>
+            </div>
           </form>
 
           {/* Divider */}
@@ -140,7 +169,7 @@ export default function AuthPage() {
             <Sparkles className="h-4.5 w-4.5 text-teal-400 shrink-0 pulse-glow-dot" />
             <div>
               <p className="font-semibold text-slate-300">Evaluating Gully Trader?</p>
-              <p className="mt-0.5">Simply enter any email (e.g. <code className="text-blue-400">admin@gullytrader.in</code> for Admin features or <code className="text-blue-400">trader@gullytrader.in</code> for Trader views) and click Sign In.</p>
+              <p className="mt-0.5">Simply enter any email/password and click Sign In. If connected to Supabase, sign up first by clicking the toggle button.</p>
             </div>
           </div>
 

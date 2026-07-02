@@ -14,6 +14,7 @@ import {
   FolderOpen,
   X
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { db } from '../../lib/supabase';
 import { Journal, Trade } from '../../lib/types';
 
@@ -30,15 +31,15 @@ interface ParsedRow {
 
 export default function CSVImporter({ userId, journals, onImportComplete, onClose }: CSVImporterProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1); // 1: Upload, 2: Map & Preview, 3: Import / Summary
-  const [broker, setBroker] = useState<'zerodha' | 'groww' | 'fyers' | 'generic'>('generic');
+  const [broker, setBroker] = useState<'zerodha' | 'groww' | 'fyers' | 'angelone' | 'generic'>('generic');
   const [targetJournalId, setTargetJournalId] = useState('');
   
-  // CSV Data State
+  // CSV / Excel Data State
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvRows, setCsvRows] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState('');
   
-  // Mapping State (CSV Header index / key -> Trade Property)
+  // Mapping State (Header index / key -> Trade Property)
   const [mappings, setMappings] = useState<{
     date: string;
     symbol: string;
@@ -115,18 +116,58 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
     if (!file) return;
 
     setFileName(file.name);
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const { headers, rows } = parseCSV(text);
-      setCsvHeaders(headers);
-      setCsvRows(rows);
+      let headers: string[] = [];
+      let rows: ParsedRow[] = [];
 
-      // Auto-configure mapper based on Broker Template
-      autoSetMappings(broker, headers);
-      setStep(2);
+      try {
+        if (isExcel) {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const sheetJson = XLSX.utils.sheet_to_json<any>(worksheet, { defval: "" });
+
+          if (sheetJson.length > 0) {
+            // Harvest headers from keys of all items
+            const allHeaders = new Set<string>();
+            sheetJson.forEach(row => {
+              Object.keys(row).forEach(key => allHeaders.add(key));
+            });
+            headers = Array.from(allHeaders);
+
+            rows = sheetJson.map(row => {
+              const parsedRow: ParsedRow = {};
+              headers.forEach(header => {
+                parsedRow[header] = row[header] !== undefined && row[header] !== null ? String(row[header]) : '';
+              });
+              return parsedRow;
+            });
+          }
+        } else {
+          const text = event.target?.result as string;
+          const parsed = parseCSV(text);
+          headers = parsed.headers;
+          rows = parsed.rows;
+        }
+
+        setCsvHeaders(headers);
+        setCsvRows(rows);
+        autoSetMappings(broker, headers);
+        setStep(2);
+      } catch (err: any) {
+        alert('Failed to parse file: ' + err.message);
+      }
     };
-    reader.readAsText(file);
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   const autoSetMappings = (selectedBroker: string, headers: string[]) => {
@@ -166,6 +207,17 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
         exchange: '',
         segment: '',
         brokerage: ''
+      });
+    } else if (selectedBroker === 'angelone') {
+      setMappings({
+        date: findMatch(['trade_date', 'date', 'transaction_date', 'deal_date']),
+        symbol: findMatch(['symbol', 'scrip', 'script', 'company', 'instrument_name']),
+        direction: findMatch(['direction', 'type', 'buy/sell', 'side', 'action']),
+        price: findMatch(['price', 'average', 'avg_rate', 'deal_price', 'rate']),
+        quantity: findMatch(['quantity', 'qty', 'volume', 'shares']),
+        exchange: findMatch(['exchange', 'market']),
+        segment: findMatch(['segment', 'instrument']),
+        brokerage: findMatch(['brokerage', 'charges', 'commission'])
       });
     } else {
       // Generic guesses
@@ -333,8 +385,8 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
           {/* STEP 1: Upload */}
           {step === 1 && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {(['generic', 'zerodha', 'groww', 'fyers'] as const).map((b) => (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                {(['generic', 'zerodha', 'groww', 'fyers', 'angelone'] as const).map((b) => (
                   <button
                     key={b}
                     type="button"
@@ -354,16 +406,16 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
                 <Upload className="mx-auto h-10 w-10 text-slate-600 mb-4" />
                 <label className="cursor-pointer">
                   <span className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/10">
-                    Choose CSV File
+                    Choose CSV / Excel File
                   </span>
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv, .xlsx, .xls"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
                 </label>
-                <p className="mt-4 text-xs text-slate-500">Supports standard CSV exports. Column headers must be on row 1.</p>
+                <p className="mt-4 text-xs text-slate-500">Supports standard CSV, XLSX, and XLS exports (e.g. Angel One, Zerodha). Headers must be on row 1.</p>
               </div>
             </div>
           )}

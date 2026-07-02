@@ -12,6 +12,70 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+// Helper to calculate P&L and Segment transaction taxes on the client side
+function calculateTradePnLAndCharges(trade: any) {
+  let gross_pnl = 0;
+  if (trade.exit_price !== null && trade.exit_price !== undefined) {
+    gross_pnl = trade.direction === 'LONG'
+      ? (trade.exit_price - trade.entry_price) * trade.quantity
+      : (trade.entry_price - trade.exit_price) * trade.quantity;
+  }
+  
+  let brokerage = Number(trade.brokerage) || 0;
+  let stt = Number(trade.stt) || 0;
+  let gst = Number(trade.gst) || 0;
+  let exchange_charges = Number(trade.exchange_charges) || 0;
+  let stamp_duty = Number(trade.stamp_duty) || 0;
+  let sebi_charges = Number(trade.sebi_charges) || 0;
+  
+  const isZeroCharges = (brokerage + stt + gst + exchange_charges + stamp_duty + sebi_charges) === 0;
+  
+  if (isZeroCharges && trade.exit_price) {
+    const volume = (trade.entry_price + trade.exit_price) * trade.quantity;
+    if (trade.exchange === 'NSE' || trade.exchange === 'BSE') {
+      if (trade.segment === 'Options') {
+        brokerage = 40.00;
+        stt = Number((trade.exit_price * trade.quantity * 0.00125).toFixed(2));
+        exchange_charges = Number((volume * 0.0005).toFixed(2));
+        gst = Number(((brokerage + exchange_charges) * 0.18).toFixed(2));
+        stamp_duty = trade.direction === 'LONG' ? Number((trade.entry_price * trade.quantity * 0.00003).toFixed(2)) : 0;
+        sebi_charges = Number((volume * 0.000001).toFixed(2));
+      } else if (trade.segment === 'Equity') {
+        brokerage = 0.00;
+        stt = Number((volume * 0.001).toFixed(2));
+        exchange_charges = Number((volume * 0.0000345).toFixed(2));
+        gst = Number(((brokerage + exchange_charges) * 0.18).toFixed(2));
+        stamp_duty = trade.direction === 'LONG' ? Number((trade.entry_price * trade.quantity * 0.00015).toFixed(2)) : 0;
+        sebi_charges = Number((volume * 0.000001).toFixed(2));
+      } else { // Futures
+        brokerage = 40.00;
+        stt = Number((trade.exit_price * trade.quantity * 0.000125).toFixed(2));
+        exchange_charges = Number((volume * 0.0002).toFixed(2));
+        gst = Number(((brokerage + exchange_charges) * 0.18).toFixed(2));
+        stamp_duty = trade.direction === 'LONG' ? Number((trade.entry_price * trade.quantity * 0.00002).toFixed(2)) : 0;
+        sebi_charges = Number((volume * 0.000001).toFixed(2));
+      }
+    } else { // Global Forex/Crypto
+      brokerage = Number((volume * 0.0004).toFixed(2));
+    }
+  }
+
+  const total_charges = Number((brokerage + stt + gst + exchange_charges + stamp_duty + sebi_charges).toFixed(2));
+  const net_pnl = Number((gross_pnl - total_charges).toFixed(2));
+
+  return {
+    gross_pnl: Number(gross_pnl.toFixed(2)),
+    brokerage,
+    stt,
+    gst,
+    exchange_charges,
+    stamp_duty,
+    sebi_charges,
+    total_charges,
+    net_pnl
+  };
+}
+
 /**
  * Unified DB Client Layer.
  * Intercepts all calls and redirects to mockDb if Supabase env vars are missing.
@@ -252,10 +316,14 @@ export const db = {
 
       const { tags, ...tradeDetails } = trade;
 
+      // Automatically calculate P&L and Charges
+      const calculated = calculateTradePnLAndCharges(tradeDetails);
+      const fullTradePayload = { ...tradeDetails, ...calculated };
+
       // Real Supabase insert
       const { data, error } = await supabase!
         .from('trades')
-        .insert([tradeDetails])
+        .insert([fullTradePayload])
         .select()
         .single();
 
@@ -279,9 +347,22 @@ export const db = {
 
       const { tags, ...tradeUpdates } = updates;
 
+      // Fetch existing trade to execute full P&L calculation accurately
+      const { data: existing, error: getErr } = await supabase!
+        .from('trades')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (getErr || !existing) throw new Error("Could not find trade to update");
+
+      const merged = { ...existing, ...tradeUpdates };
+      const calculated = calculateTradePnLAndCharges(merged);
+      const fullUpdatePayload = { ...tradeUpdates, ...calculated };
+
       const { data, error } = await supabase!
         .from('trades')
-        .update({ ...tradeUpdates, updated_at: new Date().toISOString() })
+        .update({ ...fullUpdatePayload, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
         .single();

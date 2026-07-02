@@ -99,7 +99,7 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
     // Find the header row index (row that contains trading terms)
     let headerRowIndex = 0;
     const headerKeywords = ['date', 'symbol', 'scrip', 'qty', 'quantity', 'price', 'direction', 'buy', 'sell', 'trade'];
-    for (let i = 0; i < Math.min(25, allLinesParsed.length); i++) {
+    for (let i = 0; i < Math.min(100, allLinesParsed.length); i++) {
       const row = allLinesParsed[i];
       let matchCount = 0;
       row.forEach(cell => {
@@ -162,7 +162,7 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
             // Find the header row index (row that contains trading terms)
             let headerRowIndex = 0;
             const headerKeywords = ['date', 'symbol', 'scrip', 'qty', 'quantity', 'price', 'direction', 'buy', 'sell', 'trade'];
-            for (let i = 0; i < Math.min(25, rangeJson.length); i++) {
+            for (let i = 0; i < Math.min(100, rangeJson.length); i++) {
               const row = rangeJson[i];
               let matchCount = 0;
               if (Array.isArray(row)) {
@@ -304,10 +304,28 @@ export default function CSVImporter({ userId, journals, onImportComplete, onClos
 
     // Build array of parsed trade payloads
     const tradesToProcess = csvRows.map((row, idx) => {
-      const dateVal = row[mappings.date] || new Date().toISOString().split('T')[0];
+      // Find a backup date if mappings.date is empty
+      let dateVal = row[mappings.date];
+      if (!dateVal) {
+        const dateKey = Object.keys(row).find(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('day') || k.toLowerCase().includes('time') || k.toLowerCase().includes('download'));
+        if (dateKey) dateVal = row[dateKey];
+      }
+      dateVal = dateVal || new Date().toISOString().split('T')[0];
+
       const symbolVal = row[mappings.symbol] || 'UNKNOWN';
       const directionVal = (row[mappings.direction] || 'BUY').toUpperCase().includes('SELL') || (row[mappings.direction] || '').toUpperCase().includes('SHORT') ? 'SHORT' : 'LONG';
-      const priceVal = Number(row[mappings.price] || 0);
+      
+      let priceVal = Number(row[mappings.price] || 0);
+      // Smart separate Buy/Sell price columns fallback (especially for Angel One order books)
+      if (priceVal === 0) {
+        if (directionVal === 'LONG') {
+          const buyPriceKey = Object.keys(row).find(k => k.toLowerCase().includes('buy') && (k.toLowerCase().includes('price') || k.toLowerCase().includes('average') || k.toLowerCase().includes('rate') || k.toLowerCase().includes('cost')));
+          if (buyPriceKey) priceVal = Number(row[buyPriceKey] || 0);
+        } else {
+          const sellPriceKey = Object.keys(row).find(k => k.toLowerCase().includes('sell') && (k.toLowerCase().includes('price') || k.toLowerCase().includes('average') || k.toLowerCase().includes('rate') || k.toLowerCase().includes('cost')));
+          if (sellPriceKey) priceVal = Number(row[sellPriceKey] || 0);
+        }
+      }
       const qtyVal = Number(row[mappings.quantity] || 0);
       const brokerageVal = Number(row[mappings.brokerage] || 0);
       const exchangeVal = row[mappings.exchange] || 'NSE';

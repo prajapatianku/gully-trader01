@@ -208,25 +208,31 @@ ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.seo_pages ENABLE ROW LEVEL SECURITY;
 
 -- 1. Profiles Policies
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
 CREATE POLICY "Users can view their own profile" ON public.profiles
     FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
 CREATE POLICY "Users can update their own profile" ON public.profiles
     FOR UPDATE USING (auth.uid() = id);
 
 -- 2. Journals Policies
+DROP POLICY IF EXISTS "Users can manage their own journals" ON public.journals;
 CREATE POLICY "Users can manage their own journals" ON public.journals
     FOR ALL USING (auth.uid() = user_id);
 
 -- 3. Strategies Policies
+DROP POLICY IF EXISTS "Users can manage their own strategies" ON public.strategies;
 CREATE POLICY "Users can manage their own strategies" ON public.strategies
     FOR ALL USING (auth.uid() = user_id);
 
 -- 4. Trades Policies
+DROP POLICY IF EXISTS "Users can manage their own trades" ON public.trades;
 CREATE POLICY "Users can manage their own trades" ON public.trades
     FOR ALL USING (auth.uid() = user_id);
 
 -- 5. Trade Tags Policies
+DROP POLICY IF EXISTS "Users can manage tags on their own trades" ON public.trade_tags;
 CREATE POLICY "Users can manage tags on their own trades" ON public.trade_tags
     FOR ALL USING (
         EXISTS (
@@ -237,10 +243,12 @@ CREATE POLICY "Users can manage tags on their own trades" ON public.trade_tags
     );
 
 -- 6. Rule Books Policies
+DROP POLICY IF EXISTS "Users can manage their own rules" ON public.rule_books;
 CREATE POLICY "Users can manage their own rules" ON public.rule_books
     FOR ALL USING (auth.uid() = user_id);
 
 -- 7. Rule Violations Policies
+DROP POLICY IF EXISTS "Users can manage violations on their own trades" ON public.rule_violations;
 CREATE POLICY "Users can manage violations on their own trades" ON public.rule_violations
     FOR ALL USING (
         EXISTS (
@@ -251,13 +259,16 @@ CREATE POLICY "Users can manage violations on their own trades" ON public.rule_v
     );
 
 -- 8. Daily Reviews Policies
+DROP POLICY IF EXISTS "Users can manage their own daily reviews" ON public.daily_reviews;
 CREATE POLICY "Users can manage their own daily reviews" ON public.daily_reviews
     FOR ALL USING (auth.uid() = user_id);
 
 -- 9. Imports Policies
+DROP POLICY IF EXISTS "Users can manage their own imports" ON public.imports;
 CREATE POLICY "Users can manage their own imports" ON public.imports
     FOR ALL USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view logs of their own imports" ON public.import_logs;
 CREATE POLICY "Users can view logs of their own imports" ON public.import_logs
     FOR SELECT USING (
         EXISTS (
@@ -268,9 +279,11 @@ CREATE POLICY "Users can view logs of their own imports" ON public.import_logs
     );
 
 -- 10. Feedback Policies
+DROP POLICY IF EXISTS "Users can create feedback" ON public.feedback;
 CREATE POLICY "Users can create feedback" ON public.feedback
     FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Only admins can view feedback" ON public.feedback;
 CREATE POLICY "Only admins can view feedback" ON public.feedback
     FOR SELECT USING (
         EXISTS (
@@ -281,7 +294,10 @@ CREATE POLICY "Only admins can view feedback" ON public.feedback
     );
 
 -- 11. SEO Pages Policies (Public view, Admin write)
+DROP POLICY IF EXISTS "Anyone can view SEO pages" ON public.seo_pages;
 CREATE POLICY "Anyone can view SEO pages" ON public.seo_pages FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Only admins can manage SEO pages" ON public.seo_pages;
 CREATE POLICY "Only admins can manage SEO pages" ON public.seo_pages
     FOR ALL USING (
         EXISTS (
@@ -311,7 +327,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
@@ -324,14 +341,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER update_profiles_updated_at
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+CREATE TRIGGER update_profiles_updated_at
     BEFORE UPDATE ON public.profiles
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE OR REPLACE TRIGGER update_journals_updated_at
+DROP TRIGGER IF EXISTS update_journals_updated_at ON public.journals;
+CREATE TRIGGER update_journals_updated_at
     BEFORE UPDATE ON public.journals
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE OR REPLACE TRIGGER update_trades_updated_at
+DROP TRIGGER IF EXISTS update_trades_updated_at ON public.trades;
+CREATE TRIGGER update_trades_updated_at
     BEFORE UPDATE ON public.trades
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();

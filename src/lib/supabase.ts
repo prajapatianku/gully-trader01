@@ -318,11 +318,22 @@ export const db = {
       };
 
       // Real Supabase insert
-      const { data, error } = await supabase!
+      let { data, error } = await supabase!
         .from('trades')
         .insert([fullTradePayload])
         .select()
         .single();
+
+      if (error && error.code === 'PGRST204') {
+        const { source, batch_id, ...fallbackPayload } = fullTradePayload;
+        const retry = await supabase!
+          .from('trades')
+          .insert([fallbackPayload])
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
       const createdTrade = data as Trade;
@@ -360,12 +371,24 @@ export const db = {
       const calculated = calculateTradePnLAndCharges(merged);
       const fullUpdatePayload = { ...tradeUpdates, ...calculated };
 
-      const { data, error } = await supabase!
+      let { data, error } = await supabase!
         .from('trades')
         .update({ ...fullUpdatePayload, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
         .single();
+
+      if (error && error.code === 'PGRST204') {
+        const { source, batch_id, ...fallbackPayload } = fullUpdatePayload;
+        const retry = await supabase!
+          .from('trades')
+          .update({ ...fallbackPayload, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
       const updatedTrade = data as Trade;

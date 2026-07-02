@@ -5,22 +5,18 @@ import { useRouter } from 'next/navigation';
 import { 
   History, 
   Plus, 
-  Upload, 
   Trash2, 
   Edit, 
   Search, 
   Filter,
   RefreshCw,
   Eye,
-  Check,
-  Lock,
-  Layers
+  Check
 } from 'lucide-react';
 import { db } from '../../lib/supabase';
 import { Trade, Journal, Strategy, Profile } from '../../lib/types';
 import Navbar from '../../components/layout/Navbar';
 import TradeForm from '../../components/trades/TradeForm';
-import CSVImporter from '../../components/trades/CSVImporter';
 
 export default function TradesPage() {
   const router = useRouter();
@@ -33,7 +29,6 @@ export default function TradesPage() {
 
   // Modal Triggers
   const [showManualForm, setShowManualForm] = useState(false);
-  const [showCSVWizard, setShowCSVWizard] = useState(false);
   const [tradeToEdit, setTradeToEdit] = useState<Trade | null>(null);
 
   // Search & Filter state
@@ -78,19 +73,7 @@ export default function TradesPage() {
     }
   };
 
-  const handleDeleteBatch = async (batchId: string | null | undefined) => {
-    if (!batchId) return;
-    if (!confirm('Are you sure you want to delete ALL trades imported in this file batch? This action cannot be undone.')) return;
-    try {
-      setLoading(true);
-      await db.trades.deleteBatch(batchId);
-      setTrades(trades.filter(t => t.batch_id !== batchId));
-    } catch (err) {
-      alert('Error deleting import batch');
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   const handleEditClick = (trade: Trade) => {
     setTradeToEdit(trade);
@@ -131,7 +114,7 @@ export default function TradesPage() {
             <History className="h-5 w-5 text-blue-500" />
             <div>
               <h1 className="text-lg font-bold text-white uppercase tracking-tight">Trade Ledger Logs</h1>
-              <p className="text-[10px] text-slate-500">Review, search, manually enter, or import files.</p>
+              <p className="text-[10px] text-slate-500">Review, search, manually enter, or configure trades.</p>
             </div>
           </div>
 
@@ -145,14 +128,6 @@ export default function TradesPage() {
             >
               <Plus className="h-4 w-4" />
               Manual Trade
-            </button>
-
-            <button
-              onClick={() => setShowCSVWizard(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-lg border border-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-            >
-              <Upload className="h-4 w-4" />
-              CSV Import
             </button>
           </div>
         </div>
@@ -267,19 +242,13 @@ export default function TradesPage() {
                     </td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {t.source !== 'csv_import' ? (
-                          <button
-                            onClick={() => handleEditClick(t)}
-                            className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-blue-400 transition-colors"
-                            title="Edit Trade"
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                          </button>
-                        ) : (
-                          <span className="p-1 text-slate-700 cursor-not-allowed" title="Imported trades cannot be edited">
-                            <Lock className="h-3.5 w-3.5" />
-                          </span>
-                        )}
+                        <button
+                          onClick={() => handleEditClick(t)}
+                          className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-blue-400 transition-colors"
+                          title="Edit Trade"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </button>
                         <button
                           onClick={() => handleDeleteTrade(t.id)}
                           className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-rose-450 transition-colors"
@@ -287,15 +256,6 @@ export default function TradesPage() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                        {t.batch_id && (
-                          <button
-                            onClick={() => handleDeleteBatch(t.batch_id)}
-                            className="p-1 rounded text-slate-500 hover:bg-slate-800 hover:text-orange-400 transition-colors"
-                            title="Delete entire import batch"
-                          >
-                            <Layers className="h-3.5 w-3.5" />
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -305,7 +265,7 @@ export default function TradesPage() {
               {filteredTrades.length === 0 && (
                 <tr>
                   <td colSpan={11} className="text-center py-10 text-xs text-slate-500">
-                    No matching trades logged in ledger. Click "Manual Trade" or "CSV Import" to start.
+                    No matching trades logged in ledger. Click "Manual Trade" to start.
                   </td>
                 </tr>
               )}
@@ -327,16 +287,6 @@ export default function TradesPage() {
             setTradeToEdit(null);
           }}
           onSave={loadAllData}
-        />
-      )}
-
-      {/* CSV Import modal */}
-      {showCSVWizard && user && (
-        <CSVImporter
-          userId={user.id}
-          journals={journals}
-          onImportComplete={loadAllData}
-          onClose={() => setShowCSVWizard(false)}
         />
       )}
     </div>

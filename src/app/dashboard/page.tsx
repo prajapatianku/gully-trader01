@@ -18,6 +18,7 @@ import Overview from '../../components/dashboard/Overview';
 import AnalyticsCharts from '../../components/dashboard/AnalyticsCharts';
 import CalendarView from '../../components/dashboard/CalendarView';
 import OpenPositionsDesk from '../../components/dashboard/OpenPositionsDesk';
+import MonthlyHeatmap from '../../components/dashboard/MonthlyHeatmap';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -220,6 +221,11 @@ export default function DashboardPage() {
           <>
             {/* 1. Overview metrics grid */}
             <Overview trades={filteredTrades} currency={activeCurrency} />
+
+            {/* 1.4 Monthly P&L Heatmap Grid */}
+            <div className="border-t border-slate-800/80 pt-6">
+              <MonthlyHeatmap trades={filteredTrades} currency={activeCurrency} />
+            </div>
 
             {/* 1.5 Live Open Positions & Exposure Desk */}
             <div className="border-t border-slate-800/80 pt-6">
